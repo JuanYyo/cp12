@@ -57,11 +57,10 @@ class TestApi(unittest.TestCase):
 		
     def test_api_dividezero(self):
         url = f"{BASE_URL}/calc/divide/12/0"
-        response = urlopen(url, timeout=DEFAULT_TIMEOUT)
         try:
-            response = urlopen(url, timeout=DEFAULT_TIMEOUT)
-            self.fail("Se esperaba un error 406 pero la petición fue exitosa")
-        except Exception as e:
+             response = urlopen(url, timeout=DEFAULT_TIMEOUT)
+             self.fail("Se esperaba un error 406 pero la petición fue exitosa")
+        except urllib.error.HTTPError as e:
             self.assertEqual(
                 e.code, 406, f"Se esperaba error 406 al dividir por cero, pero se recibió {e.code}"
             )
