@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+    options { skipDefaultCheckout() } //Para no hacer un checkout del código fuente entero en cada agente
+    stages {
+        
+        stage('Get Code') {
+            steps {
+                //Obtener código repositorio
+                git branch: 'master', url: 'https://github.com/JuanYyo/cp12.git'
+                echo WORKSPACE
+                sh 'echo $PWD'
+                //Necesito hacer stash de todo el código fuente para usarlo en las demás etapas
+                stash name:'code', includes:'**' 
+            }
+        }
+        
+        stage('Unit') {
+                    steps {
+                            echo 'UNIT STAGE'
+                            // Pytest no tiene la posibilidad de retornar exit=0 cuando algún test falla por lo que abortaría
+                            // el pipeline. Con catchError se captura la salida que devuelve pytest y permite
+                            // seguir con la ejecución del pipeline si falla algún test
+                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                            unstash name:'code'
+                            sh '''
+                                    export PYTHONPATH=${WORKSPACE}
+                                    pytest --junitxml=result-unit.xml test/unit
+                            '''
+                            }
+                            stash name:'unit-results', includes:'result-unit.xml'
+                        }
+                    }
+        
+        stage('Service') {
+            steps {
+                echo 'SERVICE STAGE'
+                unstash name:'code'
+                sh '''
+                        export FLASK_APP=app/api.py
+                        flask run --host=0.0.0.0 &
+                        sleep 5
+                        java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
+                        sleep 5
+                        netstat -tulpn | grep 9090
+                        # Verifica que ambos servicios estén corriendo
+                        echo "Servicios activos:"
+                        netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
+                        export PYTHONPATH=${WORKSPACE}
+                        pytest --junitxml=result-rest.xml test/rest
+                '''
+                stash name:'rest-results', includes:'result-rest.xml'
+            }
+        }
+        
+        stage('Results') {
+            steps {
+                echo 'RESULTS STAGE'
+                unstash name:'unit-results'
+                unstash name:'rest-results'
+                junit 'result*.xml'
+            }
+        }
+        
+    }
+}
