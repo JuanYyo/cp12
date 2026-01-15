@@ -13,7 +13,16 @@ pipeline {
                 stash name:'code', includes:'**' 
             }
         }
-        
+
+        stage('Static') {
+            steps {
+                echo 'STATIC STAGE'
+                unstash name:'code'
+                sh 'flake8 --exit-zero --format=pylint app >flake8.out' //exit-zero devuelve 0 pase lo que pase para que jenkins no pare la ejecucion
+                recordIssues qualityGates: [[criticality: 'NOTE', integerThreshold: 10, threshold: 10.0, type: 'TOTAL'], [criticality: 'ERROR', integerThreshold: 11, threshold: 11.0, type: 'TOTAL']], tools: [flake8(pattern: 'flake8.out')]
+            }
+        }
+
         stage('Unit') {
                     steps {
                             echo 'UNIT STAGE'
