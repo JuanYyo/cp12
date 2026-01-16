@@ -30,12 +30,12 @@ pipeline {
                             // el pipeline. Con catchError se captura la salida que devuelve pytest y permite
                             // seguir con la ejecución del pipeline si falla algún test
                             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                            unstash name:'code'
-                            sh '''
-                                    export PYTHONPATH=${WORKSPACE}
-                                    pytest --junitxml=result-unit.xml test/unit
-                            '''
-                            junit 'result-unit.xml'
+                                unstash name:'code'
+                                sh '''
+                                        export PYTHONPATH=${WORKSPACE}
+                                        pytest --junitxml=result-unit.xml test/unit
+                                '''
+                                junit 'result-unit.xml'
                             }
                             
                         }
@@ -44,21 +44,23 @@ pipeline {
         stage('Rest') {
             steps {
                 echo 'SERVICE STAGE'
-                unstash name:'code'
-                sh '''
-                        export FLASK_APP=app/api.py
-                        flask run --host=0.0.0.0 &
-                        sleep 5
-                        java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
-                        sleep 5
-                        netstat -tulpn | grep 9090
-                        # Verifica que ambos servicios estén corriendo
-                        echo "Servicios activos:"
-                        netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
-                        export PYTHONPATH=${WORKSPACE}
-                        pytest --junitxml=result-rest.xml test/rest
-                '''
-                junit 'result-rest.xml'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                    unstash name:'code'
+                    sh '''
+                            export FLASK_APP=app/api.py
+                            flask run --host=0.0.0.0 &
+                            sleep 5
+                            java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
+                            sleep 5
+                            netstat -tulpn | grep 9090
+                            # Verifica que ambos servicios estén corriendo
+                            echo "Servicios activos:"
+                            netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
+                            export PYTHONPATH=${WORKSPACE}
+                            pytest --junitxml=result-rest.xml test/rest
+                    '''
+                    junit 'result-rest.xml'
+                }
             }
         }
         
