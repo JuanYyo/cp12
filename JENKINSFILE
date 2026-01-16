@@ -57,7 +57,7 @@ pipeline {
                         export PYTHONPATH=${WORKSPACE}
                         pytest --junitxml=result-rest.xml test/rest
                 '''
-                junit 'result-rest.xml
+                junit 'result-rest.xml'
             }
         }
         
