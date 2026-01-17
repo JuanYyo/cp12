@@ -49,7 +49,7 @@ pipeline {
                                                 coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
                                         '''
                                         junit 'result-unit.xml'
-                                        stash name:'unit-results', includes:'result-unit.xml,coverage.xml,.coverage'
+                                        stash name:'unit-results', includes:'result-unit.xml,.coverage'
                                     }
                                 } else {
                                     echo "El stage ya se ha ejecutado"
