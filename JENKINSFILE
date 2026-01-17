@@ -91,6 +91,7 @@ pipeline {
             steps {
                 echo 'COBERTURA STAGE'
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                    unstash name:'code'
                     unstash name:'unit-results'
                     sh '''
                             coverage xml
