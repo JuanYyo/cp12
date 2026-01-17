@@ -46,7 +46,6 @@ pipeline {
                                         unstash name:'code'
                                         sh '''
                                                 export PYTHONPATH=${WORKSPACE}
-                                                //pytest --junitxml=result-unit.xml test/unit
                                                 coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
                                         '''
                                         junit 'result-unit.xml'
@@ -55,9 +54,9 @@ pipeline {
                                 } else {
                                     echo "El stage ya se ha ejecutado"
                                 }
-                                // Limpia el workspace del agent al final de la ejecucion
-                                deleteDir()
                             }
+                            // Limpia el workspace del agent al final de la ejecucion
+                            deleteDir()
                         }
                     }
         
