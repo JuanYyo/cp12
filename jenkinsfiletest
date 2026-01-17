@@ -1,72 +1,137 @@
+def unitTestsExecuted = false // Variable para asegurar que el stage de unit tests se ejecuta solo una vez
+
 pipeline {
     agent any
-    options { skipDefaultCheckout() } //Para no hacer un checkout del código fuente entero en cada agente
+    options { skipDefaultCheckout() } // Para no hacer un checkout del código fuente entero en cada agente
+    
+    
     stages {
         
         stage('Get Code') {
             steps {
                 //Obtener código repositorio
+                echo 'GET CODE STAGE'
                 git branch: 'master', url: 'https://github.com/JuanYyo/cp12.git'
                 echo WORKSPACE
                 sh 'echo $PWD'
                 //Necesito hacer stash de todo el código fuente para usarlo en las demás etapas
-                stash name:'code', includes:'**' 
+                stash name:'code', includes:'**'
+                // Limpia el workspace de agent1 al final
+                deleteDir()
             }
         }
-
+        
         stage('Static') {
             steps {
                 echo 'STATIC STAGE'
                 unstash name:'code'
                 sh 'flake8 --exit-zero --format=pylint app >flake8.out' //exit-zero devuelve 0 pase lo que pase para que jenkins no pare la ejecucion
-                recordIssues qualityGates: [[criticality: 'NOTE', integerThreshold: 10, threshold: 10.0, type: 'TOTAL'], [criticality: 'ERROR', integerThreshold: 11, threshold: 11.0, type: 'TOTAL']], tools: [flake8(pattern: 'flake8.out')]
+                recordIssues qualityGates: [[criticality: 'NOTE', integerThreshold: 8, threshold: 8.0, type: 'TOTAL'], [criticality: 'ERROR', integerThreshold: 10, threshold: 10.0, type: 'TOTAL']], tools: [flake8(pattern: 'flake8.out')]
+                stash name:'static-results', includes:'flake8.out'
+                // Limpia el workspace de agent1 al final
+                deleteDir()
             }
         }
-
+        
         stage('Unit') {
                     steps {
                             echo 'UNIT STAGE'
-                            // Pytest no tiene la posibilidad de retornar exit=0 cuando algún test falla por lo que abortaría
-                            // el pipeline. Con catchError se captura la salida que devuelve pytest y permite
-                            // seguir con la ejecución del pipeline si falla algún test
-                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                            unstash name:'code'
-                            sh '''
-                                    export PYTHONPATH=${WORKSPACE}
-                                    pytest --junitxml=result-unit.xml test/unit
-                            '''
+                            script {
+                                if (!unitTestsExecuted) {
+                                    unitTestsExecuted = true
+                                    // Pytest no tiene la posibilidad de retornar exit=0 cuando algún test falla por lo que abortaría
+                                    // el pipeline. Con catchError se captura la salida que devuelve pytest y permite
+                                    // seguir con la ejecución del pipeline si falla algún test
+                                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                                        unstash name:'code'
+                                        sh '''
+                                                export PYTHONPATH=${WORKSPACE}
+                                                coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
+                                        '''
+                                        junit 'result-unit.xml'
+                                        stash name:'unit-results', includes:'result-unit.xml,coverage.xml,.coverage'
+                                    }
+                                } else {
+                                    echo "El stage ya se ha ejecutado"
+                                }
                             }
-                            stash name:'unit-results', includes:'result-unit.xml'
+                            // Limpia el workspace del agent al final de la ejecucion
+                            deleteDir()
                         }
                     }
         
-        stage('Service') {
+        stage('Rest') {
             steps {
-                echo 'SERVICE STAGE'
-                unstash name:'code'
-                sh '''
-                        export FLASK_APP=app/api.py
-                        flask run --host=0.0.0.0 &
-                        sleep 5
-                        java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
-                        sleep 5
-                        netstat -tulpn | grep 9090
-                        # Verifica que ambos servicios estén corriendo
-                        echo "Servicios activos:"
-                        netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
-                        export PYTHONPATH=${WORKSPACE}
-                        pytest --junitxml=result-rest.xml test/rest
-                '''
-                stash name:'rest-results', includes:'result-rest.xml'
+                    echo 'REST STAGE'
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                        unstash name:'code'
+                        sh '''
+                                export FLASK_APP=app/api.py
+                                flask run --host=0.0.0.0 &
+                                sleep 5
+                                java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
+                                sleep 5
+                                netstat -tulpn | grep 9090
+                                # Verifica que ambos servicios estén corriendo
+                                echo "Servicios activos:"
+                                netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
+                                export PYTHONPATH=${WORKSPACE}
+                                pytest --junitxml=result-rest.xml test/rest
+                        '''
+                        junit 'result-rest.xml'
+                        stash name:'rest-results', includes:'result-rest.xml'
+
+                    }
+                    // Limpia el workspace de agent1 al final
+                    deleteDir()
             }
         }
         
-        stage('Results') {
+        
+        stage('Cobertura') {
             steps {
-                echo 'RESULTS STAGE'
-                unstash name:'unit-results'
-                unstash name:'rest-results'
-                junit 'result*.xml'
+                echo 'COBERTURA STAGE'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                    unstash name:'code'
+                    unstash name:'unit-results'
+                    sh '''
+                            coverage xml
+                    '''
+                    recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
+                }
+                // Limpia el workspace de agent1 al final
+                deleteDir()
+            }
+        }
+        
+        stage('Security') {
+            steps {
+                echo 'SECURITY STAGE'
+                unstash name:'code'
+                sh 'bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"'
+                recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates: [[threshold: 2, type: 'TOTAL', unstable: true],[threshold: 4, type: 'TOTAL', unstable: false]]
+                stash name:'security-results', includes:'bandit.out'
+                // Limpia el workspace de agent1 al final
+                deleteDir()
+            }
+        }
+        
+        stage('Performance') {
+            steps {
+                echo 'PERFORMANCE STAGE'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                    unstash name:'code'
+                    
+                    sh '''
+                    export FLASK_APP=app/api.py
+                    flask run --host=0.0.0.0 &
+                    sleep 5
+                    /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
+                    '''
+                    perfReport sourceDataFiles: 'flask.jtl'
+                }
+                // Limpia el workspace de agent1 al final
+                deleteDir()
             }
         }
         
