@@ -62,27 +62,28 @@ pipeline {
         
         stage('Rest') {
             steps {
-                echo 'REST STAGE'
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                    unstash name:'code'
-                    sh '''
-                            export FLASK_APP=app/api.py
-                            flask run --host=0.0.0.0 &
-                            sleep 5
-                            java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
-                            sleep 5
-                            netstat -tulpn | grep 9090
-                            # Verifica que ambos servicios estén corriendo
-                            echo "Servicios activos:"
-                            netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
-                            export PYTHONPATH=${WORKSPACE}
-                            pytest --junitxml=result-rest.xml test/rest
-                    '''
-                    junit 'result-rest.xml'
-                    stash name:'rest-results', includes:'result-rest.xml'
+                    echo 'REST STAGE'
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                        unstash name:'code'
+                        sh '''
+                                export FLASK_APP=app/api.py
+                                flask run --host=0.0.0.0 &
+                                sleep 5
+                                java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
+                                sleep 5
+                                netstat -tulpn | grep 9090
+                                # Verifica que ambos servicios estén corriendo
+                                echo "Servicios activos:"
+                                netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
+                                export PYTHONPATH=${WORKSPACE}
+                                pytest --junitxml=result-rest.xml test/rest
+                        '''
+                        junit 'result-rest.xml'
+                        stash name:'rest-results', includes:'result-rest.xml'
+
+                    }
                     // Limpia el workspace de agent1 al final
-                deleteDir()
-                }
+                    deleteDir()
             }
         }
         
