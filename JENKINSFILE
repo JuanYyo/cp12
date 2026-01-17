@@ -1,7 +1,9 @@
+def unitTestsExecuted = false // Variable para asegurar que el stage de unit tests se ejecuta solo una vez
+
 pipeline {
     agent any
     options { skipDefaultCheckout() } // Para no hacer un checkout del código fuente entero en cada agente
-    def unitTestsExecuted = false // Variable para asegurar que el stage de unit tests se ejecuta solo una vez
+    
     
     stages {
         
