@@ -36,26 +36,28 @@ pipeline {
         stage('Unit') {
                     steps {
                             echo 'UNIT STAGE'
-                            if (!unitTestsExecuted) {
-                                unitTestsExecuted = true
-                                // Pytest no tiene la posibilidad de retornar exit=0 cuando algún test falla por lo que abortaría
-                                // el pipeline. Con catchError se captura la salida que devuelve pytest y permite
-                                // seguir con la ejecución del pipeline si falla algún test
-                                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                                    unstash name:'code'
-                                    sh '''
-                                            export PYTHONPATH=${WORKSPACE}
-                                            //pytest --junitxml=result-unit.xml test/unit
-                                            coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
-                                    '''
-                                    junit 'result-unit.xml'
-                                    stash name:'unit-results', includes:'result-unit.xml,coverage.xml,.coverage'
+                            script {
+                                if (!unitTestsExecuted) {
+                                    unitTestsExecuted = true
+                                    // Pytest no tiene la posibilidad de retornar exit=0 cuando algún test falla por lo que abortaría
+                                    // el pipeline. Con catchError se captura la salida que devuelve pytest y permite
+                                    // seguir con la ejecución del pipeline si falla algún test
+                                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                                        unstash name:'code'
+                                        sh '''
+                                                export PYTHONPATH=${WORKSPACE}
+                                                //pytest --junitxml=result-unit.xml test/unit
+                                                coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
+                                        '''
+                                        junit 'result-unit.xml'
+                                        stash name:'unit-results', includes:'result-unit.xml,coverage.xml,.coverage'
+                                    }
+                                } else {
+                                    echo "El stage ya se ha ejecutado"
                                 }
-                            } else {
-                                echo "El stage ya se ha ejecutado"
+                                // Limpia el workspace del agent al final de la ejecucion
+                                deleteDir()
                             }
-                            // Limpia el workspace del agent al final de la ejecucion
-                            deleteDir()
                         }
                     }
         
