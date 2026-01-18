@@ -155,6 +155,7 @@ pipeline {
                     }
                 }
             }
+        }
         
-    }
-}
+    }  //stages principal
+}  //pipeline
