@@ -39,14 +39,14 @@ pipeline {
                                             sh '''
                                                 hostname
                                                 export FLASK_APP=app/api.py
-                                                flask run --host=0.0.0.0 &
+                                                flask run --host=0.0.0.0 --port=5001 &
                                                 sleep 5
                                                 java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
                                                 sleep 5
                                                 netstat -tulpn | grep 9090
                                                 # Verifica que ambos servicios estén corriendo
                                                 echo "Servicios activos:"
-                                                netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
+                                                netstat -tulpn | grep -E '(5001|9090)' || echo "No se detectaron servicios en los puertos esperados"
                                                 export PYTHONPATH=${WORKSPACE}
                                                 pytest --junitxml=result-rest.xml test/rest
                                             '''
