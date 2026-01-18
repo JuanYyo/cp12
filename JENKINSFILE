@@ -11,7 +11,7 @@ pipeline {
             steps {
                 //Obtener código repositorio
                 echo 'GET CODE STAGE'
-                git branch: 'master', url: 'https://github.com/JuanYyo/cp12.git'
+                git branch: 'feature_fix_coverage', url: 'https://github.com/JuanYyo/cp12.git'
                 echo WORKSPACE
                 sh 'echo $PWD'
                 //Necesito hacer stash de todo el código fuente para usarlo en las demás etapas
