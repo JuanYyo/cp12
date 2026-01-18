@@ -6,7 +6,7 @@ pipeline {
     stages {
         
         stage('Get Code') {
-            agent { label 'principal' }
+            agent { label 'master' }
             steps {
                 //Obtener código repositorio
                 echo 'GET CODE STAGE'
@@ -29,7 +29,7 @@ pipeline {
                 
                 // AGENTE MASTER: Rest tests
                 stage('Rest') {
-                    agent { label 'principal' }
+                    agent { label 'master' }
                     steps {
                         echo 'REST STAGE'
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
