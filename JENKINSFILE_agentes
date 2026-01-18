@@ -26,57 +26,59 @@ pipeline {
         
         stage('Parallel') {
             parallel {
-                
-                // AGENTE MASTER: Rest tests
-                stage('Rest') {
-                    agent { label 'master' }
-                    steps {
-                        echo 'REST STAGE'
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                            unstash name:'code'
-                            sh '''
-                                hostname
-                                export FLASK_APP=app/api.py
-                                flask run --host=0.0.0.0 &
-                                sleep 5
-                                java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
-                                sleep 5
-                                netstat -tulpn | grep 9090
-                                # Verifica que ambos servicios estén corriendo
-                                echo "Servicios activos:"
-                                netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
-                                export PYTHONPATH=${WORKSPACE}
-                                pytest --junitxml=result-rest.xml test/rest
-                            '''
-                            junit 'result-rest.xml'
-                            stash name:'rest-results', includes:'result-rest.xml'
-                        }
-                        // Limpia el workspace del agent al final de la ejecucion
-                        deleteDir()
-                    }
-                }
-                
-                // AGENTE 1: Performance tests (DEDICADO)
-                stage('Performance') {
+
+                // AGENTE 1: Rest + Performance (SECUENCIAL dentro del paralelo)
+                stage('Rest & Performance') {
                     agent { label 'agent1' }
-                    steps {
-                        echo 'PERFORMANCE STAGE'
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                            unstash name:'code'
-                            sh '''
-                                hostname
-                                export FLASK_APP=app/api.py
-                                flask run --host=0.0.0.0 &
-                                sleep 5
-                                /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
-                            '''
-                            perfReport sourceDataFiles: 'flask.jtl'
-                        }
-                        // Limpia el workspace del agent al final de la ejecucion
-                        deleteDir()
+                    stages {
+                                stage('Rest') {
+                                    steps {
+                                        echo 'REST STAGE'
+                                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                                            unstash name:'code'
+                                            sh '''
+                                                hostname
+                                                export FLASK_APP=app/api.py
+                                                flask run --host=0.0.0.0 &
+                                                sleep 5
+                                                java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
+                                                sleep 5
+                                                netstat -tulpn | grep 9090
+                                                # Verifica que ambos servicios estén corriendo
+                                                echo "Servicios activos:"
+                                                netstat -tulpn | grep -E '(5000|9090)' || echo "No se detectaron servicios en los puertos esperados"
+                                                export PYTHONPATH=${WORKSPACE}
+                                                pytest --junitxml=result-rest.xml test/rest
+                                            '''
+                                            junit 'result-rest.xml'
+                                            stash name:'rest-results', includes:'result-rest.xml'
+                                        }
+                                        // Limpia el workspace del agent al final de la ejecucion
+                                        deleteDir()
+                                    }
+                                }
+                
+                                stage('Performance') {
+                                    steps {
+                                        echo 'PERFORMANCE STAGE'
+                                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                                            unstash name:'code'
+                                            sh '''
+                                                hostname
+                                                export FLASK_APP=app/api.py
+                                                flask run --host=0.0.0.0 &
+                                                sleep 5
+                                                /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
+                                            '''
+                                            perfReport sourceDataFiles: 'flask.jtl'
+                                        }
+                                        // Limpia el workspace del agent al final de la ejecucion
+                                        deleteDir()
+                                    }
+                                }
                     }
                 }
-                
+
                 // AGENTE 2: Static
                 stage('Static') {
                     agent { label 'agent2' }
@@ -106,9 +108,9 @@ pipeline {
                     }
                 }
                 
-                // AGENTE 2: Unit + Cobertura (SECUENCIAL dentro del paralelo)
+                // MASTER: Unit + Cobertura (SECUENCIAL dentro del paralelo)
                 stage('Unit & Coverage') {
-                    agent { label 'agent2' }
+                    agent { label 'master' }
                     stages {
                         stage('Unit') {
                             steps {
