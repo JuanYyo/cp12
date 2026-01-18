@@ -13,8 +13,7 @@ pipeline {
                 git branch: 'master', url: 'https://github.com/JuanYyo/cp12.git'
                 echo WORKSPACE
                 sh '''
-                    echo hostname
-                    echo ${env.NODE_NAME}
+                    hostname
                     echo $PWD
                     echo ${WORKSPACE}
                 '''
@@ -36,7 +35,7 @@ pipeline {
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
                             unstash name:'code'
                             sh '''
-                                echo hostname
+                                hostname
                                 export FLASK_APP=app/api.py
                                 flask run --host=0.0.0.0 &
                                 sleep 5
@@ -84,7 +83,7 @@ pipeline {
                     steps {
                         echo 'STATIC STAGE'
                         unstash name:'code'
-                        sh 'echo hostname; flake8 --exit-zero --format=pylint app >flake8.out'
+                        sh 'hostname; flake8 --exit-zero --format=pylint app >flake8.out'
                         recordIssues qualityGates: [[criticality: 'NOTE', integerThreshold: 8, threshold: 8.0, type: 'TOTAL'], [criticality: 'ERROR', integerThreshold: 10, threshold: 10.0, type: 'TOTAL']], tools: [flake8(pattern: 'flake8.out')]
                         stash name:'static-results', includes:'flake8.out'
                         // Limpia el workspace del agent al final de la ejecucion
@@ -98,7 +97,7 @@ pipeline {
                     steps {
                         echo 'SECURITY STAGE'
                         unstash name:'code'
-                        sh 'echo hostname'
+                        sh 'hostname'
                         sh 'bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"'
                         recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates: [[threshold: 2, type: 'TOTAL', unstable: true],[threshold: 4, type: 'TOTAL', unstable: false]]
                         stash name:'security-results', includes:'bandit.out'
@@ -118,6 +117,7 @@ pipeline {
                                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
                                     unstash name:'code'
                                     sh '''
+                                        hostname
                                         export PYTHONPATH=${WORKSPACE}
                                         coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
                                         coverage combine
@@ -144,6 +144,7 @@ pipeline {
                     unstash name:'code'
                     unstash name:'unit-results'
                     sh '''
+                        hostname
                         coverage xml
                     '''
                     recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
