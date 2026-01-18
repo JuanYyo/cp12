@@ -104,7 +104,7 @@ pipeline {
                     }
                 }
                 
-                // MASTER: Unit + Cobertura (SECUENCIAL dentro del paralelo)
+                // AGENT1: Unit + Cobertura (SECUENCIAL dentro del paralelo)
                 stage('Unit & Coverage') {
                     agent { label 'agent1' }
                     stages {
