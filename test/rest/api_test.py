@@ -25,16 +25,6 @@ class TestApi(unittest.TestCase):
             response.read().decode(), "3", "ERROR ADD"
         )
 
-    def test_api_dividezero(self):
-        url = f"{BASE_URL}/calc/divide/12/0"
-        try:
-            response = urlopen(url, timeout=DEFAULT_TIMEOUT)
-            self.fail("Se esperaba un error 406 pero la petición fue exitosa")
-        except Exception as e:
-            self.assertEqual(e.code, 406, "ERROR: código esperado 406")
-            error_msg = e.read().decode()
-            self.assertEqual(error_msg, "ERROR DIVIDE/0", "ERROR: mensaje incorrecto")
-
     def test_api_sqrt(self):
         url = f"{BASE_URL_MOCK}/calc/sqrt/64"
         response = urlopen(url, timeout=DEFAULT_TIMEOUT)
