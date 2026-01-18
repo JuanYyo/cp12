@@ -106,52 +106,55 @@ pipeline {
                     }
                 }
                 
-                // AGENTE 2: Unit
-                stage('Unit') {
+                // AGENTE 2: Unit + Cobertura (SECUENCIAL dentro del paralelo)
+                stage('Unit & Coverage') {
                     agent { label 'agent2' }
-                    steps {
-                        echo 'UNIT STAGE'
-                        script {
-                            if (!unitTestsExecuted) {
-                                unitTestsExecuted = true
-                                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                                    unstash name:'code'
-                                    sh '''
-                                        hostname
-                                        export PYTHONPATH=${WORKSPACE}
-                                        coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
-                                        coverage combine
-                                    '''
-                                    junit 'result-unit.xml'
-                                    stash name:'unit-results', includes:'result-unit.xml,.coverage'
+                    stages {
+                        stage('Unit') {
+                            steps {
+                                echo 'UNIT STAGE'
+                                script {
+                                    if (!unitTestsExecuted) {
+                                        unitTestsExecuted = true
+                                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                                            unstash name:'code'
+                                            sh '''
+                                                hostname
+                                                echo ${WORKSPACE}
+                                                export PYTHONPATH=${WORKSPACE}
+                                                coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
+                                            '''
+                                            junit 'result-unit.xml'
+                                            stash name:'unit-results', includes:'result-unit.xml,.coverage'
+                                        }
+                                    } else {
+                                        echo "El stage ya se ha ejecutado"
+                                    }
                                 }
-                            } else {
-                                echo "El stage ya se ha ejecutado"
+                                // Limpia el workspace del agent al final de la ejecucion
+                                deleteDir()
                             }
                         }
-                        // Limpia el workspace del agent al final de la ejecucion
-                        deleteDir()
+                        
+                        stage('Cobertura') {
+                            steps {
+                                echo 'COBERTURA STAGE'
+                                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                                    unstash name:'code'
+                                    unstash name:'unit-results'
+                                    sh '''
+                                        hostname
+                                        coverage xml
+                                    '''
+                                    recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
+                                }
+                                // Limpia el workspace del agent al final de la ejecucion
+                                deleteDir()
+                            }
+                        }
                     }
                 }
             }
-        }
         
-        stage('Cobertura') {
-            agent { label 'agent2' }
-            steps {
-                echo 'COBERTURA STAGE'
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                    unstash name:'code'
-                    unstash name:'unit-results'
-                    sh '''
-                        hostname
-                        coverage xml
-                    '''
-                    recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
-                }
-                // Limpia el workspace del agent al final de la ejecucion
-                deleteDir()
-            }
-        }
     }
 }
