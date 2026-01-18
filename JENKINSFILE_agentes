@@ -14,6 +14,7 @@ pipeline {
                 echo WORKSPACE
                 sh '''
                     echo hostname
+                    echo ${env.NODE_NAME}
                     echo $PWD
                     echo ${WORKSPACE}
                 '''
