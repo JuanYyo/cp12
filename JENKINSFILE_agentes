@@ -120,6 +120,7 @@ pipeline {
                                     sh '''
                                         export PYTHONPATH=${WORKSPACE}
                                         coverage run --branch --source=app --omit=app/__init__.py,app/api.py -m pytest --junitxml=result-unit.xml test/unit
+                                        coverage combine
                                     '''
                                     junit 'result-unit.xml'
                                     stash name:'unit-results', includes:'result-unit.xml,.coverage'
