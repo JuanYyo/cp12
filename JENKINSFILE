@@ -12,7 +12,7 @@ pipeline {
                 //Obtener código repositorio
                 echo 'GET CODE STAGE'
                 git branch: 'master', url: 'https://github.com/JuanYyo/cp12.git'
-                echo WORKSPACE
+                echo ${WORKSPACE}
                 sh 'echo $PWD'
                 //Necesito hacer stash de todo el código fuente para usarlo en las demás etapas
                 stash name:'code', includes:'**'
