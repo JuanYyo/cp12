@@ -39,8 +39,8 @@ class TestCalculate(unittest.TestCase):
         self.assertRaises(TypeError, self.calc.divide, "2", 2)
         self.assertRaises(TypeError, self.calc.divide, 2, "2")
         self.assertRaises(TypeError, self.calc.divide, "2", "2")
-
-     def test_divide_method_fails_with_zero_parameter(self):
+        
+    def test_divide_method_fails_with_zero_parameter(self):
         self.assertRaises(TypeError, self.calc.divide, 10, 0)
 
     def test_multiply_method_returns_correct_result(self):
