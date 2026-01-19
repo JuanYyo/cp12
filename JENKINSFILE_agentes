@@ -2,9 +2,9 @@ def unitTestsExecuted = false // Variable para asegurar que el stage de unit tes
 
 pipeline {
     agent none
-    
+
     stages {
-        
+
         stage('Get Code') {
             agent { label 'master' }
             steps {
@@ -23,9 +23,13 @@ pipeline {
                 deleteDir()
             }
         }
-        
+
+
+
         stage('Parallel') {
             parallel {
+
+                // agent1: REST
                 stage('Rest') {
                     agent { label 'agent1' }
                     steps {
@@ -37,8 +41,20 @@ pipeline {
                                 echo ${WORKSPACE}
                                 export FLASK_APP=app/api.py
                                 flask run --host=0.0.0.0 --port=5001 &
+                                FLASK_PID=$!
+
                                 sleep 5
+
                                 java -jar /opt/wiremock.jar --port 9090 --root-dir test/wiremock &
+                                WIREMOCK_PID=$!
+
+                                # Intenta matar Flask y WireMock, y si no puede continua
+                                cleanup() {
+                                  kill "$FLASK_PID" "$WIREMOCK_PID" >/dev/null 2>&1 || true 
+                                }
+                                # Cuando el script termine, por el motivo que sea, ejecuta la función cleanup
+                                trap cleanup EXIT 
+
                                 sleep 5
                                 netstat -tulpn | grep 9090
                                 # Verifica que ambos servicios estén corriendo
@@ -54,72 +70,21 @@ pipeline {
                         deleteDir()
                     }
                 }
-                
-                stage('Performance') {
-                    agent { label 'agent2' }
-                    steps {
-                        echo 'PERFORMANCE STAGE'
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                            unstash name:'code'
-                            sh '''
-                                hostname
-                                echo ${WORKSPACE}
-                                export FLASK_APP=app/api.py
-                                flask run --host=0.0.0.0 &
-                                sleep 5
-                                /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
-                            '''
-                            perfReport sourceDataFiles: 'flask.jtl'
-                        }
-                        // Limpia el workspace del agent al final de la ejecucion
-                        deleteDir()
-                    }
-                }
 
-
-                // AGENTE 3: Static
-                stage('Static') {
-                    agent { label 'agent3' }
-                    steps {
-                        echo 'STATIC STAGE'
-                        unstash name:'code'
-                        sh '''
-                                hostname
-                                echo ${WORKSPACE}
-                                flake8 --exit-zero --format=pylint app >flake8.out
-                        '''
-                        recordIssues qualityGates: [[criticality: 'NOTE', integerThreshold: 8, threshold: 8.0, type: 'TOTAL'], [criticality: 'ERROR', integerThreshold: 10, threshold: 10.0, type: 'TOTAL']], tools: [flake8(pattern: 'flake8.out')]
-                        stash name:'static-results', includes:'flake8.out'
-                        // Limpia el workspace del agent al final de la ejecucion
-                        deleteDir()
-                    }
-                }
-                
-                // AGENTE 3: Security
-                stage('Security') {
-                    agent { label 'agent3' }
-                    steps {
-                        echo 'SECURITY STAGE'
-                        unstash name:'code'
-                        sh 'hostname; echo ${WORKSPACE}'
-                        sh 'bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"'
-                        recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates: [[threshold: 2, type: 'TOTAL', unstable: true],[threshold: 4, type: 'TOTAL', unstable: false]]
-                        stash name:'security-results', includes:'bandit.out'
-                        // Limpia el workspace del agent al final de la ejecucion
-                        deleteDir()
-                    }
-                }
-                
-                // AGENT1: Unit + Cobertura (SECUENCIAL dentro del paralelo)
+                // agent2: UNIT + COBERTURA (secuencial)
                 stage('Unit & Coverage') {
-                    agent { label 'agent1' }
+                    agent { label 'agent2' }
                     stages {
+
                         stage('Unit') {
                             steps {
                                 echo 'UNIT STAGE'
                                 script {
                                     if (!unitTestsExecuted) {
                                         unitTestsExecuted = true
+                                        // Pytest no tiene la posibilidad de retornar exit=0 cuando algún test falla por lo que abortaría
+                                        // el pipeline. Con catchError se captura la salida que devuelve pytest y permite
+                                        // seguir con la ejecución del pipeline si falla algún test
                                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
                                             unstash name:'code'
                                             sh '''
@@ -139,7 +104,7 @@ pipeline {
                                 deleteDir()
                             }
                         }
-                        
+
                         stage('Cobertura') {
                             steps {
                                 echo 'COBERTURA STAGE'
@@ -147,11 +112,12 @@ pipeline {
                                     unstash name:'code'
                                     unstash name:'unit-results'
                                     sh '''
-                                        hostname
-                                        echo ${WORKSPACE}
-                                        coverage xml
+                                            hostname
+                                            echo ${WORKSPACE}
+                                            coverage xml
                                     '''
                                     recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
+                                     stash name:'coverage-results', includes:'coverage.xml'
                                 }
                                 // Limpia el workspace del agent al final de la ejecucion
                                 deleteDir()
@@ -159,8 +125,80 @@ pipeline {
                         }
                     }
                 }
+
+                // agent2: STATIC
+                stage('Static') {
+                    agent { label 'agent2' }
+                    steps {
+                        echo 'STATIC STAGE'
+                        unstash name:'code'
+                        sh '''
+                                hostname
+                                echo ${WORKSPACE}
+                                flake8 --exit-zero --format=pylint app >flake8.out
+                        ''' //exit-zero devuelve 0 pase lo que pase para que jenkins no pare la ejecucion
+
+                        recordIssues qualityGates: [[criticality: 'NOTE', integerThreshold: 8, threshold: 8.0, type: 'TOTAL'], [criticality: 'ERROR', integerThreshold: 10, threshold: 10.0, type: 'TOTAL']], tools: [flake8(pattern: 'flake8.out')]
+
+                        stash name:'static-results', includes:'flake8.out
+                        // Limpia el workspace del agent al final de la ejecucion
+                        deleteDir()
+                    }
+                }
+
+                // agent2: SECURITY
+                stage('Security') {
+                    agent { label 'agent2' }
+                    steps {
+                        echo 'SECURITY STAGE'
+                        unstash name:'code'
+                        sh '''
+                                hostname
+                                echo ${WORKSPACE}
+                                bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"
+                        '''
+                        recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates: [[threshold: 2, type: 'TOTAL', unstable: true],[threshold: 4, type: 'TOTAL', unstable: false]]
+
+                        stash name:'security-results', includes:'bandit.out'
+                        // Limpia el workspace del agent al final de la ejecucion
+                        deleteDir()
+                    }
+                }
             }
         }
-        
-    }  //stages principal
-}  //pipeline
+
+        // agent1: PERFORMANCE (solo y después del paralelo)
+        stage('Performance') {
+            agent { label 'agent1' }
+            steps {
+                echo 'PERFORMANCE STAGE'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                    unstash name:'code'
+
+                    sh '''
+                        hostname
+                        echo ${WORKSPACE}
+                        export FLASK_APP=app/api.py
+                        flask run --host=0.0.0.0 &
+                        FLASK_PID=$!
+
+                        
+                        # Intenta matar Flask, y si no puede continua
+                        cleanup() {
+                          kill "$FLASK_PID" >/dev/null 2>&1 || true 
+                        }
+                        #Cuando el script termine, por el motivo que sea, ejecuta la función cleanup
+                        trap cleanup EXIT 
+
+                        sleep 5
+                        /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
+                    '''
+                    perfReport sourceDataFiles: 'flask.jtl'
+                    stash name:'performance-results', includes:'flask.jtl'
+                }
+                // Limpia el workspace del agent al final de la ejecucion
+                deleteDir()
+            }
+        }
+    }
+}
