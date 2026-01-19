@@ -145,60 +145,60 @@ pipeline {
         // agent1: UNIT + COBERTURA (secuencial)
         stage('Performance & Coverage') {
         parallel {
-            stages {
-                    // agent1: PERFORMANCE (solo y después del paralelo)
-                    stage('Performance') {
-                        agent { label 'agent1' }
-                        steps {
-                            echo 'PERFORMANCE STAGE'
-                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                                unstash name:'code'
+                // agent1: PERFORMANCE (solo y después del paralelo)
+                stage('Performance') {
+                    agent { label 'agent1' }
+                    steps {
+                        echo 'PERFORMANCE STAGE'
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                            unstash name:'code'
 
-                                sh '''
-                                    hostname
-                                    echo ${WORKSPACE}
-                                    export FLASK_APP=app/api.py
-                                    flask run --host=0.0.0.0 &
-                                    FLASK_PID=$!
+                            sh '''
+                                hostname
+                                echo ${WORKSPACE}
+                                export FLASK_APP=app/api.py
+                                flask run --host=0.0.0.0 &
+                                FLASK_PID=$!
 
-                                    
-                                    # Intenta matar Flask, y si no puede continua
-                                    cleanup() {
-                                      kill "$FLASK_PID" >/dev/null 2>&1 || true 
-                                    }
-                                    #Cuando el script termine, por el motivo que sea, ejecuta la función cleanup
-                                    trap cleanup EXIT 
+                                
+                                # Intenta matar Flask, y si no puede continua
+                                cleanup() {
+                                  kill "$FLASK_PID" >/dev/null 2>&1 || true 
+                                }
+                                #Cuando el script termine, por el motivo que sea, ejecuta la función cleanup
+                                trap cleanup EXIT 
 
-                                    sleep 5
-                                    /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
-                                '''
-                                perfReport sourceDataFiles: 'flask.jtl'
-                                stash name:'performance-results', includes:'flask.jtl'
-                            }
-                            // Limpia el workspace del agent al final de la ejecucion
-                            deleteDir()
+                                sleep 5
+                                /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
+                            '''
+                            perfReport sourceDataFiles: 'flask.jtl'
+                            stash name:'performance-results', includes:'flask.jtl'
                         }
-                    }
-
-                    stage('Cobertura') {
-                        steps {
-                            echo 'COBERTURA STAGE'
-                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                                unstash name:'code'
-                                unstash name:'unit-results'
-                                sh '''
-                                        hostname
-                                        echo ${WORKSPACE}
-                                        coverage xml
-                                '''
-                                recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
-                                 stash name:'coverage-results', includes:'coverage.xml'
-                            }
-                            // Limpia el workspace del agent al final de la ejecucion
-                            deleteDir()
-                        }
+                        // Limpia el workspace del agent al final de la ejecucion
+                        deleteDir()
                     }
                 }
+
+                stage('Cobertura') {
+                    agent { label 'agent2' }
+                    steps {
+                        echo 'COBERTURA STAGE'
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                            unstash name:'code'
+                            unstash name:'unit-results'
+                            sh '''
+                                    hostname
+                                    echo ${WORKSPACE}
+                                    coverage xml
+                            '''
+                            recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
+                             stash name:'coverage-results', includes:'coverage.xml'
+                        }
+                        // Limpia el workspace del agent al final de la ejecucion
+                        deleteDir()
+                    }
+                }
+                
             }
         }
 
