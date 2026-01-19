@@ -98,6 +98,7 @@ pipeline {
                             coverage xml
                     '''
                     recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
+                    stash name:'coverage-results', includes:'coverage.xml'
                 }
                 // Limpia el workspace del agent al final de la ejecucion
                 deleteDir()
@@ -129,6 +130,7 @@ pipeline {
                     /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
                     '''
                     perfReport sourceDataFiles: 'flask.jtl'
+                    stash name:'performance-results', includes:'flask.jtl'
                 }
                 // Limpia el workspace del agent al final de la ejecucion
                 deleteDir()
