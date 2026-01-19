@@ -140,7 +140,7 @@ pipeline {
 
                         recordIssues qualityGates: [[criticality: 'NOTE', integerThreshold: 8, threshold: 8.0, type: 'TOTAL'], [criticality: 'ERROR', integerThreshold: 10, threshold: 10.0, type: 'TOTAL']], tools: [flake8(pattern: 'flake8.out')]
 
-                        stash name:'static-results', includes:'flake8.out
+                        stash name:'static-results', includes:'flake8.out'
                         // Limpia el workspace del agent al final de la ejecucion
                         deleteDir()
                     }
