@@ -29,9 +29,9 @@ pipeline {
         stage('Parallel') {
             parallel {
 
-                // agent1: REST
+                // agent2: REST
                 stage('Rest') {
-                    agent { label 'agent1' }
+                    agent { label 'agent2' }
                     steps {
                         echo 'REST STAGE'
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
@@ -164,41 +164,43 @@ pipeline {
                         deleteDir()
                     }
                 }
-            }
-        }
 
-        // agent1: PERFORMANCE (solo y después del paralelo)
-        stage('Performance') {
-            agent { label 'agent1' }
-            steps {
-                echo 'PERFORMANCE STAGE'
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                    unstash name:'code'
+                // agent1: PERFORMANCE (solo y después del paralelo)
+                stage('Performance') {
+                    agent { label 'agent1' }
+                    steps {
+                        echo 'PERFORMANCE STAGE'
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                            unstash name:'code'
 
-                    sh '''
-                        hostname
-                        echo ${WORKSPACE}
-                        export FLASK_APP=app/api.py
-                        flask run --host=0.0.0.0 &
-                        FLASK_PID=$!
+                            sh '''
+                                hostname
+                                echo ${WORKSPACE}
+                                export FLASK_APP=app/api.py
+                                flask run --host=0.0.0.0 &
+                                FLASK_PID=$!
 
-                        
-                        # Intenta matar Flask, y si no puede continua
-                        cleanup() {
-                          kill "$FLASK_PID" >/dev/null 2>&1 || true 
+                                
+                                # Intenta matar Flask, y si no puede continua
+                                cleanup() {
+                                  kill "$FLASK_PID" >/dev/null 2>&1 || true 
+                                }
+                                #Cuando el script termine, por el motivo que sea, ejecuta la función cleanup
+                                trap cleanup EXIT 
+
+                                sleep 5
+                                /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
+                            '''
+                            perfReport sourceDataFiles: 'flask.jtl'
+                            stash name:'performance-results', includes:'flask.jtl'
                         }
-                        #Cuando el script termine, por el motivo que sea, ejecuta la función cleanup
-                        trap cleanup EXIT 
-
-                        sleep 5
-                        /opt/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
-                    '''
-                    perfReport sourceDataFiles: 'flask.jtl'
-                    stash name:'performance-results', includes:'flask.jtl'
+                        // Limpia el workspace del agent al final de la ejecucion
+                        deleteDir()
+                    }
                 }
-                // Limpia el workspace del agent al final de la ejecucion
-                deleteDir()
             }
         }
+
+
     }
 }
